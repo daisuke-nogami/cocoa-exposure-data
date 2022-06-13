@@ -1,0 +1,262 @@
+<html>
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script type="text/javascript">
+var form_text = "";
+
+function parse_text(){
+  // 色を順番に変えるための仕組み
+  const COLORS = [
+    '#4dc9f6',
+    '#f67019',
+    '#f53794',
+    '#537bc4',
+    '#acc236',
+    '#166a8f',
+    '#00a950',
+    '#58595b',
+    '#8549ba'
+  ];
+  function color(index) {
+    return COLORS[index % COLORS.length];
+  }
+  // 色一覧
+  const CHART_COLORS = {
+    red: 'rgb(255, 99, 132)',
+    orange: 'rgb(255, 159, 64)',
+    yellow: 'rgb(255, 205, 86)',
+    green: 'rgb(75, 192, 192)',
+    blue: 'rgb(54, 162, 235)',
+    purple: 'rgb(153, 102, 255)',
+    grey: 'rgb(201, 203, 207)'
+  };
+
+  var dataForm = document.forms['data-in'];
+
+  if(!(dataForm.elements['text-in'].value === form_text)) {
+    form_text = dataForm.elements['text-in'].value;
+
+//  try {
+    var json = JSON.parse(dataForm.elements['text-in'].value);
+    var min_date = new Date();
+
+    // ENの設定値を取得する(Google用の表記から取得)
+    var attenuation_bucket_threshold_db = json.exposure_configuration.google_daily_summaries_config.attenuation_bucket_threshold_db;
+    var attenuation_bucket_weights = json.exposure_configuration.google_daily_summaries_config.attenuation_bucket_weights;
+
+    // exposure_windowsを処理する
+    var daily_scores = {};    // 手計算するスコア
+    var daily_exposures = {}; // グラフ表示用の変数
+    for (let j=0; j<json.exposure_windows.length; j++) {
+      // exposure_dataに入っている最小の日付を発見する
+      var tmp_date = new Date(json.exposure_windows[j].DateMillisSinceEpoch);
+      if ( tmp_date < min_date ) {
+        min_date = tmp_date;
+      }
+
+      // ページ内の表に1行挿入
+      var newline = document.getElementById('data-out2').insertRow(-1);
+      // exposure_windowを1つ取り出して日付等を記入
+      var cell_date = newline.insertCell(-1);
+      cell_date.appendChild(document.createTextNode(tmp_date.toLocaleDateString()));
+      cell_date.rowSpan = json.exposure_windows[j].ScanInstances.length;
+      for (let k=0; k<json.exposure_windows[j].ScanInstances.length; k++) {
+        if(k>0) {
+          // 同じexposure_windowの接触が複数に分かれて記録されているときに行を増やす
+          var newline2 = document.getElementById('data-out2').insertRow(-1);
+          var cell_seconds = newline2.insertCell(-1);
+          var cell_typical = newline2.insertCell(-1);
+          var cell_min = newline2.insertCell(-1);
+        } else {
+          var cell_seconds = newline.insertCell(-1);
+          var cell_typical = newline.insertCell(-1);
+          var cell_min = newline.insertCell(-1);
+        }
+        cell_seconds.appendChild(document.createTextNode(json.exposure_windows[j].ScanInstances[k].SecondsSinceLastScan));
+        cell_min.appendChild(document.createTextNode(json.exposure_windows[j].ScanInstances[k].MinAttenuationDb));
+        cell_typical.appendChild(document.createTextNode(json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb));
+
+        if(json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb <= attenuation_bucket_threshold_db[0]) {
+          cell_typical.style.backgroundColor = '#FF8C00';
+        } else if(json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb <= attenuation_bucket_threshold_db[1]) {
+          cell_typical.style.backgroundColor = '#FFD700';
+        } else if(json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb <= attenuation_bucket_threshold_db[2]) {
+          cell_typical.style.backgroundColor = '#00FA9A';
+        } else {
+          cell_typical.style.backgroundColor = '#00FFFF';
+        }
+
+        // グラフ用に結果を集計する
+        if(daily_exposures[tmp_date]) {
+          // 既にその日のデータがあり
+          if(daily_exposures[tmp_date][json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb]) {
+            // その電波強度のScanInstanceがあるなら加算する
+            daily_exposures[tmp_date][json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb] += json.exposure_windows[j].ScanInstances[k].SecondsSinceLastScan;
+          } else {
+            // 電波強度だけなければ追加する
+            daily_exposures[tmp_date][json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb] = json.exposure_windows[j].ScanInstances[k].SecondsSinceLastScan;
+          }
+        } else {
+          // その日のデータが無いので、電波強度別のデータも追加する
+          daily_exposures[tmp_date] = {};
+          daily_exposures[tmp_date][json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb] = json.exposure_windows[j].ScanInstances[k].SecondsSinceLastScan;
+        }
+
+        // スコアを計算して変数に格納する
+        if(daily_scores[tmp_date] === undefined) {
+          // その日のデータが無ければ、まず変数を追加する
+          daily_scores[tmp_date] = 0;
+        }
+        // 過去のデータと比べて加算する
+        if(json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb <= attenuation_bucket_threshold_db[0]) {
+          daily_scores[tmp_date] += json.exposure_windows[j].ScanInstances[k].SecondsSinceLastScan * attenuation_bucket_weights[0];
+        } else if(json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb <= attenuation_bucket_threshold_db[1]) {
+          daily_scores[tmp_date] += json.exposure_windows[j].ScanInstances[k].SecondsSinceLastScan * attenuation_bucket_weights[1];
+        } else if(json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb <= attenuation_bucket_threshold_db[2]) {
+          daily_scores[tmp_date] += json.exposure_windows[j].ScanInstances[k].SecondsSinceLastScan * attenuation_bucket_weights[2];
+        } else {
+          daily_scores[tmp_date] += json.exposure_windows[j].ScanInstances[k].SecondsSinceLastScan * attenuation_bucket_weights[3];
+        }
+      }
+    }
+
+    // 電波強度別の受信時間をグラフに反映する
+    // グラフに与えるデータセットを作成する
+    var datasets = [];
+    var color_num = 0;
+    for (let key_date in daily_exposures) {
+      var tmp_plot = [];
+      color_num += 1;
+      const plot_date = new Date(key_date);
+      for (let key_db in daily_exposures[key_date]) {
+        tmp_plot.push(
+          {
+            x: ((plot_date-min_date)/86400/1000),
+            y: key_db,
+            r: (Math.log10(Math.pow(daily_exposures[key_date][key_db],2))-1)*5,
+            label: daily_exposures[key_date][key_db]
+          }
+        );
+      }
+      datasets.push(
+        {
+          label: plot_date.toLocaleDateString(),
+          data: tmp_plot,
+          backgroundColor: color(color_num)
+        }
+      );
+    }
+
+    // グラフを作成する
+    const ctx = document.getElementById('myChart');
+    var graph_data = [];
+    const myChart = new Chart(ctx, {
+        type: 'bubble',
+        data: {
+          datasets: datasets
+        },
+        options: {
+            scales: {
+              y: {
+                min: 40,
+                max: 100,
+                reverse: true,
+                grid: {
+                  drawBorder: false,
+                  color: function(context) {
+                    if (context.tick.value > 55) {
+                      return CHART_COLORS.green;
+                    } else if (context.tick.value < 50) {
+                      return CHART_COLORS.red;
+                    }
+                    return '#000000';
+                  }
+                }
+              }
+            }
+        }
+    });
+
+    // daily_summariesを処理する
+    for (let i=0; i<json.daily_summaries.length; i++) {
+      var newline = document.getElementById('data-out').insertRow(-1);
+      var cell_date = newline.insertCell(-1);
+      var tmp_date = new Date(json.daily_summaries[i].DateMillisSinceEpoch);
+      cell_date.appendChild(document.createTextNode(tmp_date.toLocaleDateString()));
+      var cell_maxscore = newline.insertCell(-1);
+      cell_maxscore.appendChild(document.createTextNode(json.daily_summaries[i].DaySummary.MaximumScore));
+      var cell_scoresum = newline.insertCell(-1);
+      cell_scoresum.appendChild(document.createTextNode(json.daily_summaries[i].DaySummary.ScoreSum));
+      var cell_weightsum = newline.insertCell(-1);
+      cell_weightsum.appendChild(document.createTextNode(json.daily_summaries[i].DaySummary.WeightedDurationSum));
+      var cell_calcsum = newline.insertCell(-1);
+      cell_calcsum.appendChild(document.createTextNode(Math.round(daily_scores[tmp_date]*10)/10));
+    }
+
+//  } catch (e) {
+//    alert('JSON parse error!');
+//  }
+
+  }
+
+}
+  </script>
+  <title>exposure_data.json parser</title>
+</head>
+<body>
+  <h1>COCOA's exposure_data.json parser</h1>
+
+  <p>
+    COCOA v2.0.1で実装された、Exposure Notification API v2の出力するExposure Dataを解釈して表示するWebアプリです。<br />
+    利用前に、本プロジェクトの<a href="https://github.com/daisuke-nogami/cocoa-exposure-data/blob/main/README.md">README</a>をご確認ください。<br />
+    グラフ表示部分では、外部ライブラリの<a href="https://www.chartjs.org/docs/latest/">Chart.js</a>を利用していますが、当サイト・外部ライブラリともに入力されたデータは保存しておらず、
+    クライアント側で閉じて処理をしています。
+  </p>
+
+  <hr>
+  <h2>COCOAから出力された exposure_data.json を貼り付けるスペース</h2>
+
+  <form id="data-in">
+    <textarea name="text-in" rows="8" cols="80"></textarea><br />
+    <input type="button" name="button" value="exposure_data.jsonをパースする" onclick="parse_text()" />
+  </form>
+
+  <hr>
+  <h2>パース結果</h2>
+
+  <p>
+    接触に関わる情報について、その意味も含めて表形式で出力します。
+  </p>
+
+  <table id="data-out" border="1">
+    <tr>
+      <th>UTC基準の日付(Date)<br />日本時間では9:00～翌日8:59</th>
+      <th>Exposure Windowの中で最も大きなスコア<br />(MaximumScore)</th>
+      <th>感染性・検査方法を加味したスコアの合計値<br />(ScoreSum)</th>
+      <th>感染性・検査方法を加味しないスコアの合計値<br />(WeightedDurationSum)</th>
+      <th>(参考)exposure_windowsの内容から計算されるスコア</th>
+    </tr>
+  </table>
+
+  <table id="data-out2" border="1">
+    <tr>
+      <th>UTC基準の日付(Date)<br />日本時間では9:00～翌日8:59</th>
+      <th>信号の受信時間<br />(SecondsSinceLastScan)</th>
+      <th>受信時間中の平均電波強度<br />(TypicalAttenuationDb)</th>
+      <th>受信時間中の最強電波強度<br />(MinAttenuationDb)</th>
+    </tr>
+  </table>
+
+  <hr>
+  <h2>exposure_data.jsonのデータの可視化（試験中）</h2>
+
+  <p>
+    縦軸が電波強度、横軸が日付、円の大きさが接触時間を示しています。
+  </p>
+
+  <div>
+    <canvas id="myChart"></canvas>
+  </div>
+
+</body>
+</html>
