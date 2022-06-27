@@ -48,7 +48,7 @@ function parse_text(){
     var daily_scores = {};    // 手計算するスコア
     var daily_exposures = {}; // グラフ表示用の変数
     for (let j=0; j<json.exposure_windows.length; j++) {
-      // exposure_dataに入っている最小の日付を発見する
+      // もしexposure_dataに未来の日付が入っていたら、日数計算の起点を未来の日付にする
       var tmp_date = new Date(json.exposure_windows[j].DateMillisSinceEpoch);
       if ( tmp_date > max_date ) {
         max_date = tmp_date;
@@ -159,14 +159,14 @@ function parse_text(){
             plugins: {
               title: {
                 display: true,
-                text: 'exposure_data.jsonに記録された陽性登録者の端末からの信号受信状況'
+                text: 'exposure_data.jsonに記録された、陽性登録者の端末からの信号の受信状況'
               }
             },
             scales: {
               x: {
                 title: {
                   display: true,
-                  text: '最新の信号受信日からの経過日数'
+                  text: '信号受信日からの経過日数'
                 }
               },
               y: {
@@ -301,7 +301,7 @@ if (window.FileList && window.File && window.FileReader) {
   <h2>exposure_data.jsonのデータの可視化（試験中）</h2>
 
   <p>
-    縦軸が電波強度、横軸が日付、円の大きさが接触時間を示しています。
+    縦軸が電波強度(上に行くほど強い)、横軸が信号受信からの日数(左ほど最近)、円の大きさが接触時間(大きいほど長い)を示しています。
   </p>
 
   <div>
