@@ -38,7 +38,7 @@ function parse_text(){
 
   try {
     var json = JSON.parse(dataForm.elements['text-in'].value);
-    var min_date = new Date();
+    var max_date = new Date();
 
     // ENの設定値を取得する(Google用の表記から取得)
     var attenuation_bucket_threshold_db = json.exposure_configuration.google_daily_summaries_config.attenuation_bucket_threshold_db;
@@ -50,8 +50,8 @@ function parse_text(){
     for (let j=0; j<json.exposure_windows.length; j++) {
       // exposure_dataに入っている最小の日付を発見する
       var tmp_date = new Date(json.exposure_windows[j].DateMillisSinceEpoch);
-      if ( tmp_date < min_date ) {
-        min_date = tmp_date;
+      if ( tmp_date > max_date ) {
+        max_date = tmp_date;
       }
 
       // ページ内の表に1行挿入
@@ -131,7 +131,7 @@ function parse_text(){
       for (let key_db in daily_exposures[key_date]) {
         tmp_plot.push(
           {
-            x: ((plot_date-min_date)/86400/1000),
+            x: ((max_date-plot_date)/86400/1000),
             y: key_db,
             r: (Math.log10(Math.pow(daily_exposures[key_date][key_db],2))-1)*5,
             label: daily_exposures[key_date][key_db]
@@ -156,11 +156,27 @@ function parse_text(){
           datasets: datasets
         },
         options: {
+            plugins: {
+              title: {
+                display: true,
+                text: 'exposure_data.jsonに記録された陽性登録者の端末からの信号受信状況'
+              }
+            },
             scales: {
+              x: {
+                title: {
+                  display: true,
+                  text: '最新の信号受信日からの経過日数'
+                }
+              },
               y: {
-                min: 40,
+                min: 30,
                 max: 100,
                 reverse: true,
+                title: {
+                  display: true,
+                  text: '電波強度(dB)'
+                },
                 grid: {
                   drawBorder: false,
                   color: function(context) {
@@ -214,12 +230,21 @@ function parse_text(){
   </p>
 
   <hr>
-  <h2>COCOAから出力された exposure_data.json を貼り付けるスペース</h2>
+  <h2>exposure_data.jsonの読み込み</h2>
 
   <form id="data-in">
-    <textarea name="text-in" rows="8" cols="80"></textarea><br />
-    <input type="button" name="button" value="exposure_data.jsonをパースする" onclick="parse_text()" /><br />
-    <input type="file" name="file-selector" />
+    <p>
+      保存されたファイルから読み込む：
+      <input type="file" name="file-selector" />
+    </p>
+    <p>
+      jsonファイルを手で貼り付ける：
+      <textarea name="text-in" rows="8" cols="80"></textarea>
+    </p>
+    <p>
+      貼り付けられたjsonを解釈する：
+      <input type="button" name="button" value="exposure_data.jsonをパースする" onclick="parse_text()" /><br />
+    </p>
   </form>
 
   <script>
@@ -227,7 +252,7 @@ var forms = document.forms['data-in']
 const json_paste_area = forms.elements['text-in'];
 if (window.FileList && window.File && window.FileReader) {
   forms.elements['file-selector'].addEventListener('change', event => {
-    json_paste_area.value = '';
+    json_paste_area.value = 'Reading file...';
     const file = event.target.files[0];
     if (!file.type) {
       alert('Error: The File.type property does not appear to be supported on this browser.');
@@ -237,7 +262,6 @@ if (window.FileList && window.File && window.FileReader) {
       alert('Error: The selected file does not appear to be an image.');
       return;
     }
-    json_paste_area.value = "reading...";
     const reader = new FileReader();
     reader.addEventListener('load', event => {
       json_paste_area.value = event.target.result;
@@ -256,8 +280,8 @@ if (window.FileList && window.File && window.FileReader) {
 
   <table id="data-out" border="1">
     <tr>
-      <th>UTC基準の日付(Date)<br />日本時間では9:00～翌日8:59</th>
-      <th>Exposure Windowの中で最も大きなスコア<br />(MaximumScore)</th>
+      <th>UTC基準の日付(Date)<br /><small>日本時間では9:00～翌日8:59</small></th>
+      <th>最も大きなスコアを持つExposure Windowのスコア<br />(MaximumScore)</th>
       <th>感染性・検査方法を加味したスコアの合計値<br />(ScoreSum)</th>
       <th>感染性・検査方法を加味しないスコアの合計値<br />(WeightedDurationSum)</th>
       <th>(参考)exposure_windowsの内容から計算されるスコア</th>
