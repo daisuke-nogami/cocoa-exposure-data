@@ -3,6 +3,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script type="text/javascript">
 var form_text = "";
+var myChart;
 
 function parse_text(){
   // 色を順番に変えるための仕組み
@@ -57,6 +58,12 @@ function parse_text(){
       // ページ内の表に1行挿入
       var newline = document.getElementById('data-out2').insertRow(-1);
       // exposure_windowを1つ取り出して日付等を記入
+      var cell_label = newline.insertCell(-1);
+      cell_label.appendChild(document.createTextNode(dataForm.elements['json-file-name'].value));
+      cell_label.rowSpan = json.exposure_windows[j].ScanInstances.length;
+      var cell_num = newline.insertCell(-1);
+      cell_num.appendChild(document.createTextNode(j));
+      cell_num.rowSpan = json.exposure_windows[j].ScanInstances.length;
       var cell_date = newline.insertCell(-1);
       cell_date.appendChild(document.createTextNode(tmp_date.toLocaleDateString()));
       cell_date.rowSpan = json.exposure_windows[j].ScanInstances.length;
@@ -150,7 +157,10 @@ function parse_text(){
     // グラフを作成する
     const ctx = document.getElementById('myChart');
     var graph_data = [];
-    const myChart = new Chart(ctx, {
+    if ( myChart ) {
+      myChart.destroy();
+    }
+    myChart = new Chart(ctx, {
         type: 'bubble',
         data: {
           datasets: datasets
@@ -196,6 +206,8 @@ function parse_text(){
     // daily_summariesを処理する
     for (let i=0; i<json.daily_summaries.length; i++) {
       var newline = document.getElementById('data-out').insertRow(-1);
+      var cell_label = newline.insertCell(-1);
+      cell_label.appendChild(document.createTextNode(dataForm.elements['json-file-name'].value));
       var cell_date = newline.insertCell(-1);
       var tmp_date = new Date(json.daily_summaries[i].DateMillisSinceEpoch);
       cell_date.appendChild(document.createTextNode(tmp_date.toLocaleDateString()));
@@ -238,7 +250,11 @@ function parse_text(){
       <input type="file" name="file-selector" />
     </p>
     <p>
-      jsonファイルを手で貼り付ける：
+      jsonファイル名（手動で記入も可能）：
+      <input type="text" name="json-file-name" value="exposure_data.json" />
+    </p>
+    <p>
+      jsonファイルの内容（手で貼り付けも可能）：
       <textarea name="text-in" rows="8" cols="80"></textarea>
     </p>
     <p>
@@ -254,12 +270,13 @@ if (window.FileList && window.File && window.FileReader) {
   forms.elements['file-selector'].addEventListener('change', event => {
     json_paste_area.value = 'Reading file...';
     const file = event.target.files[0];
+    forms.elements['json-file-name'].value = event.target.files[0].name;
     if (!file.type) {
       alert('Error: The File.type property does not appear to be supported on this browser.');
       return;
     }
     if (!file.type.match('json.*')) {
-      alert('Error: The selected file does not appear to be an image.');
+      alert('Error: The selected file is not JSON file.');
       return;
     }
     const reader = new FileReader();
@@ -280,6 +297,7 @@ if (window.FileList && window.File && window.FileReader) {
 
   <table id="data-out" border="1">
     <tr>
+      <th>ファイル名</th>
       <th>UTC基準の日付(Date)<br /><small>日本時間では9:00～翌日8:59</small></th>
       <th>最も大きなスコアを持つExposure Windowのスコア<br />(MaximumScore)</th>
       <th>感染性・検査方法を加味したスコアの合計値<br />(ScoreSum)</th>
@@ -290,7 +308,9 @@ if (window.FileList && window.File && window.FileReader) {
 
   <table id="data-out2" border="1">
     <tr>
-      <th>UTC基準の日付(Date)<br />日本時間では9:00～翌日8:59</th>
+      <th>ファイル名</th>
+      <th>Window番号</th>
+      <th>UTC基準の日付(Date)<br /><small>日本時間では9:00～翌日8:59</small></th>
       <th>信号の受信時間<br />(SecondsSinceLastScan)</th>
       <th>受信時間中の平均電波強度<br />(TypicalAttenuationDb)</th>
       <th>受信時間中の最強電波強度<br />(MinAttenuationDb)</th>
