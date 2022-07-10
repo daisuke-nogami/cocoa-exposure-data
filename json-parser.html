@@ -1,6 +1,7 @@
 <html>
 <head>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/chart.js@3.8.0/dist/chart.min.js"></script>
+  <script src="https://unpkg.com/chartjs-chart-error-bars@3.8.0/build/index.umd.min.js"></script>
   <script type="text/javascript">
 var form_text = "";
 var myChart;
@@ -47,7 +48,8 @@ function parse_text(){
 
     // exposure_windowsを処理する
     var daily_scores = {};    // 手計算するスコア
-    var daily_exposures = {}; // グラフ表示用の変数
+    var daily_exposures = {}; // グラフ表示用の変数(TypicalAttenuationDb用)
+    var daily_exposures_min = {}; // グラフ表示用の変数(MinAttenuationDb用)
     for (let j=0; j<json.exposure_windows.length; j++) {
       // もしexposure_dataに未来の日付が入っていたら、日数計算の起点を未来の日付にする
       var tmp_date = new Date(json.exposure_windows[j].DateMillisSinceEpoch);
@@ -99,14 +101,21 @@ function parse_text(){
           if(daily_exposures[tmp_date][json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb]) {
             // その電波強度のScanInstanceがあるなら加算する
             daily_exposures[tmp_date][json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb] += json.exposure_windows[j].ScanInstances[k].SecondsSinceLastScan;
+            // とともにMinAttenuationDbも比較して記録する
+            if( daily_exposures_min[tmp_date][json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb] > json.exposure_windows[j].ScanInstances[k].MinAttenuationDb ) {
+              daily_exposures_min[tmp_date][json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb] = json.exposure_windows[j].ScanInstances[k].MinAttenuationDb;
+            }
           } else {
             // 電波強度だけなければ追加する
             daily_exposures[tmp_date][json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb] = json.exposure_windows[j].ScanInstances[k].SecondsSinceLastScan;
+            daily_exposures_min[tmp_date][json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb] = json.exposure_windows[j].ScanInstances[k].MinAttenuationDb;
           }
         } else {
           // その日のデータが無いので、電波強度別のデータも追加する
           daily_exposures[tmp_date] = {};
           daily_exposures[tmp_date][json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb] = json.exposure_windows[j].ScanInstances[k].SecondsSinceLastScan;
+          daily_exposures_min[tmp_date] = {};
+          daily_exposures_min[tmp_date][json.exposure_windows[j].ScanInstances[k].TypicalAttenuationDb] = json.exposure_windows[j].ScanInstances[k].MinAttenuationDb;
         }
 
         // スコアを計算して変数に格納する
@@ -140,7 +149,8 @@ function parse_text(){
           {
             x: ((max_date-plot_date)/86400/1000),
             y: key_db,
-            r: (Math.log10(Math.pow(daily_exposures[key_date][key_db],2))-1)*5,
+            yMin: daily_exposures_min[key_date][key_db],
+//            r: (Math.log10(Math.pow(daily_exposures[key_date][key_db],2))-1)*5,
             label: daily_exposures[key_date][key_db]
           }
         );
@@ -161,7 +171,7 @@ function parse_text(){
       myChart.destroy();
     }
     myChart = new Chart(ctx, {
-        type: 'bubble',
+        type: 'scatterWithErrorBars',
         data: {
           datasets: datasets
         },
@@ -180,7 +190,7 @@ function parse_text(){
                 }
               },
               y: {
-                min: 30,
+                min: 20,
                 max: 100,
                 reverse: true,
                 title: {
@@ -237,8 +247,10 @@ function parse_text(){
   <p>
     COCOA v2.0.1で実装された、Exposure Notification API v2の出力するExposure Dataを解釈して表示するWebアプリです。<br />
     利用前に、本プロジェクトの<a href="https://github.com/daisuke-nogami/cocoa-exposure-data/blob/main/README.md">README</a>をご確認ください。<br />
-    グラフ表示部分では、外部ライブラリの<a href="https://www.chartjs.org/docs/latest/">Chart.js</a>を利用していますが、当サイト・外部ライブラリともに入力されたデータは保存しておらず、
-    クライアント側で閉じて処理をしています。
+    グラフ表示部分では、外部ライブラリの<a href="https://www.chartjs.org/docs/latest/">Chart.js</a>と、
+    Chart.jsのプラグイン<a href="https://github.com/sgratzl/chartjs-chart-error-bars">chartjs-chart-error-bars
+</a>を利用していますが、
+    当サイト・外部ライブラリともに入力されたデータは保存しておらず、クライアント側で閉じて処理をしています。
   </p>
 
   <hr>
@@ -321,7 +333,8 @@ if (window.FileList && window.File && window.FileReader) {
   <h2>exposure_data.jsonのデータの可視化（試験中）</h2>
 
   <p>
-    縦軸が電波強度(上に行くほど強い)、横軸が信号受信からの日数(左ほど最近)、円の大きさが接触時間(大きいほど長い)を示しています。
+    縦軸は電波強度(上に行くほど強い)、横軸が信号受信からの日数(左ほど最近)です。
+    接触中の平均電波強度を点にプロットし、その接触での最強電波強度を誤差バーで示しています。
   </p>
 
   <div>
